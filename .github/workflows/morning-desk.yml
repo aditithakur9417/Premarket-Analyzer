@@ -1,0 +1,57 @@
+# Morning Premarket Desk — fetch + Gemini + email
+#
+# Runs Mon–Fri at 08:15 IST (02:45 UTC). Also triggerable manually.
+# Setup: docs/GITHUB_ACTIONS.md
+
+name: Morning Desk
+
+on:
+  schedule:
+    # 08:15 India Standard Time = 02:45 UTC
+    - cron: "45 2 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morning-desk
+  cancel-in-progress: false
+
+jobs:
+  run-desk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-flash-latest
+      USE_LLM_DEFAULT: "true"
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: "587"
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      SMTP_USE_TLS: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Fetch, analyze, email
+        run: python manual_run.py --email --llm

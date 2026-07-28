@@ -33,6 +33,7 @@ Open http://localhost:5173 — login `admin` / password from `.env`.
 Full guides:
 - **[docs/DEPLOY.md](docs/DEPLOY.md)** — general Docker / VPS
 - **[docs/HOSTINGER_HPANEL.md](docs/HOSTINGER_HPANEL.md)** — Hostinger hPanel (VPS + Docker Manager)
+- **[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md)** — free morning run via GitHub Actions (no VPS)
 - **[docs/LLM_DEPLOY.md](docs/LLM_DEPLOY.md)** — free Gemini/Groq (no local Ollama)
 
 ```bash
