@@ -1,0 +1,65 @@
+# Desk alone (use Groq/Gemini free keys in .env):
+#   docker compose up -d --build
+#
+# Desk + self-hosted Ollama (~8GB RAM):
+#   docker compose --profile ollama up -d --build
+#   docker compose --profile ollama --profile pull run --rm ollama-pull
+
+services:
+  desk:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      # Free LLM — see docs/LLM_DEPLOY.md (Groq/Gemini keys or Ollama profile)
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    volumes:
+      - desk_data:/app/data
+    restart: unless-stopped
+
+  # Fully free self-hosted LLM (needs ~8GB RAM for qwen2.5:7b)
+  # Start with: docker compose --profile ollama up -d
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  # One-shot: docker compose --profile ollama --profile pull run --rm ollama-pull
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["pull"]
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Ollama…"
+        sleep 3
+        ollama pull $${OLLAMA_MODEL:-qwen2.5:7b}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+    restart: "no"
+
+volumes:
+  desk_data:
+  ollama_data:
