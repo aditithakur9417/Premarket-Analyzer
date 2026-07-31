@@ -52,20 +52,38 @@ def label_from_open_pct(pct: float | None, predicted_bias: str = "") -> str:
 
 
 def prediction_hit(predicted: str, actual_label: str, actual_pct: float | None) -> bool:
+    """Strict directional + magnitude hit (honest calibration)."""
     if actual_pct is None:
         return False
     p = (predicted or "").lower()
-    # Directional hit
-    if "gap up" in p or "breakout" in p or "mild positive" in p:
-        return actual_pct >= 0.3
-    if "gap down" in p or "mild negative" in p:
-        return actual_pct <= -0.3
+    if "gap up" in p:
+        return actual_pct >= 1.5
+    if "breakout" in p:
+        return actual_pct >= 0.8
+    if "mild positive" in p:
+        return actual_pct >= 0.5
+    if "gap down" in p:
+        return actual_pct <= -1.5
+    if "mild negative" in p:
+        return actual_pct <= -0.5
     if "fade" in p:
-        # Fade = not a strong continuation gap
+        # Fade = not a strong continuation gap in the predicted direction
         return abs(actual_pct) < 1.5
     if "neutral" in p:
         return abs(actual_pct) < 0.6
     return False
+
+
+def expected_gap_for_label(predicted: str) -> float:
+    from .conviction import EXPECTED_GAP_PCT
+
+    return float(EXPECTED_GAP_PCT.get(predicted, 0.0))
+
+
+def prediction_abs_error(predicted: str, actual_pct: float | None) -> float | None:
+    if actual_pct is None:
+        return None
+    return abs(float(actual_pct) - expected_gap_for_label(predicted))
 
 
 def fetch_open_vs_prev(symbol: str) -> dict[str, float | None]:

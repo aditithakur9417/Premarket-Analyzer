@@ -11,6 +11,7 @@ from premarket.calibration import (
     CalibrationSummary,
     fetch_open_vs_prev,
     label_from_open_pct,
+    prediction_abs_error,
     prediction_hit,
 )
 
@@ -87,15 +88,21 @@ def calibration_stats(db: Session, *, limit: int = 200) -> dict[str, Any]:
     hits = sum(1 for r in rows if r.hit)
     errs: list[float] = []
     by_label: dict[str, dict[str, int]] = {}
+    by_event: dict[str, dict[str, int]] = {}
     for r in rows:
         bucket = by_label.setdefault(r.predicted_impact or "?", {"n": 0, "hits": 0})
         bucket["n"] += 1
         if r.hit:
             bucket["hits"] += 1
+        eb = by_event.setdefault(r.event_type or "?", {"n": 0, "hits": 0})
+        eb["n"] += 1
+        if r.hit:
+            eb["hits"] += 1
         try:
-            # crude directional error vs expected
             gap = float(r.actual_open_gap_pct)
-            errs.append(abs(gap))
+            err = prediction_abs_error(r.predicted_impact or "", gap)
+            if err is not None:
+                errs.append(err)
         except (TypeError, ValueError):
             pass
     summary = CalibrationSummary(
@@ -115,10 +122,18 @@ def calibration_stats(db: Session, *, limit: int = 200) -> dict[str, Any]:
             "hit": r.hit,
             "conviction": r.conviction,
             "filing_status": r.filing_status,
+            "event_type": r.event_type,
             "created_at": r.created_at.isoformat() if r.created_at else "",
         }
         for r in rows[:30]
     ]
     out = summary.to_dict()
     out["recent"] = recent
+    out["by_event_type"] = by_event
+    out["hit_thresholds"] = {
+        "Gap Up Likely": ">= +1.5%",
+        "Mild Positive": ">= +0.5%",
+        "Gap Down Risk": "<= -1.5%",
+        "note": "MAE is |actual − expected midpoint| by label",
+    }
     return out

@@ -260,8 +260,27 @@ def enrich_top_catalysts(
     if not llm_available():
         return catalysts
 
-    top = catalysts[:limit]
-    for c in top:
+    # Prefer highest priority / conviction names
+    ordered = sorted(
+        catalysts,
+        key=lambda x: (getattr(x, "priority_rank", 0), x.conviction, x.strength),
+        reverse=True,
+    )[:limit]
+    for c in ordered:
+        locked_opening = c.opening_impact
+        locked_strength = c.strength
+        unverified_lock = c.filing_status == "unverified" and c.event_type in {
+            "m_and_a",
+            "order_win",
+            "fundraising",
+            "buyback",
+            "open_offer",
+            "regulatory_approval",
+            "earnings_beat",
+            "earnings_miss",
+            "business_entry",
+            "promoter_buying",
+        }
         headlines = "\n".join(f"- {a.title}: {a.body[:280]}" for a in c.articles[:4])
         mkt = ""
         if c.prev_day_chg_pct is not None or c.cap_tier:
@@ -269,10 +288,18 @@ def enrich_top_catalysts(
                 f"Market: cap={c.cap_tier or '?'}, prior_day={c.prev_day_chg_pct}, "
                 f"liq={c.liquidity_tier}, sector={c.sector or '?'}\n"
             )
+        filing_line = f"Filing status: {c.filing_status or 'n/a'}. {c.filing_note or ''}\n"
+        constraints = ""
+        if unverified_lock:
+            constraints = (
+                "HARD CONSTRAINT: filing is unverified — you MUST NOT choose Gap Up Likely or Gap Down Risk; "
+                "prefer Mild Positive / Mild Negative / Watch for Breakout / Neutral.\n"
+            )
         prompt = f"""You are an institutional India equity pre-market desk analyst.
 Stock: {c.name} ({c.symbol})
 Heuristic bias: {c.bias}, event: {c.event_type}, strength: {c.strength}/5
-{mkt}Global/GIFT context: {global_context or 'n/a'}
+Current opening label: {c.opening_impact}
+{mkt}{filing_line}{constraints}Global/GIFT context: {global_context or 'n/a'}
 
 Headlines in news window:
 {headlines}
@@ -293,13 +320,21 @@ No markdown."""
                 continue
             if obj.get("why_it_matters"):
                 c.why = str(obj["why_it_matters"]).strip()
-            if obj.get("opening_impact"):
-                c.opening_impact = str(obj["opening_impact"]).strip()
             if obj.get("risks"):
                 c.risks = str(obj["risks"]).strip()
+            if obj.get("opening_impact"):
+                proposed = str(obj["opening_impact"]).strip()
+                if unverified_lock and proposed in {"Gap Up Likely", "Gap Down Risk"}:
+                    c.opening_impact = locked_opening  # keep heuristic downgrade
+                else:
+                    c.opening_impact = proposed
             s = obj.get("strength_1_to_5")
             if isinstance(s, int) and 1 <= s <= 5:
-                c.strength = max(1, min(5, round((c.strength + s) / 2)))
+                blended = max(1, min(5, round((c.strength + s) / 2)))
+                if unverified_lock:
+                    c.strength = min(blended, locked_strength, 3)
+                else:
+                    c.strength = blended
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError, RuntimeError):
             continue
     return catalysts

@@ -26,6 +26,9 @@ export type Catalyst = {
   conviction_factors?: string[];
   oi_change_pct?: number | null;
   deal_summary?: string;
+  filing_url?: string;
+  priority_tier?: string;
+  priority_rank?: number;
 };
 
 export type MarketTape = {

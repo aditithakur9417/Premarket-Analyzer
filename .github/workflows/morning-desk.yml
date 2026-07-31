@@ -52,5 +52,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
+      - name: NSE holiday check
+        id: holiday
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from premarket.calendar_nse import NSE_HOLIDAYS_2026, is_trading_day, set_holiday_provider
+          set_holiday_provider(lambda: set(NSE_HOLIDAYS_2026))
+          today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+          trading = is_trading_day(today)
+          print(f"today={today} trading_day={trading}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"trading={'true' if trading else 'false'}\n")
+          PY
+
       - name: Fetch, analyze, email
-        run: python manual_run.py --email --llm
+        if: steps.holiday.outputs.trading == 'true'
+        run: python manual_run.py --email --llm --force
+
+      - name: Skipped holiday notice
+        if: steps.holiday.outputs.trading != 'true'
+        run: echo "NSE holiday/weekend — no email sent."

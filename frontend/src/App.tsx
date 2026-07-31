@@ -13,7 +13,15 @@ import {
 import { cronToDays, cronToTime, buildScheduleCron, describeSchedule, formatNextRun } from "./schedule";
 
 type Tab = "desk" | "preopen" | "calibration" | "holidays" | "settings";
-type DeskFilter = "bullish" | "bearish" | "carryover" | "all";
+type DeskFilter =
+  | "priority"
+  | "verified_gap"
+  | "bullish"
+  | "bearish"
+  | "fade"
+  | "unverified"
+  | "carryover"
+  | "all";
 
 function biasClass(bias: string) {
   const b = (bias || "").toLowerCase();
@@ -260,7 +268,7 @@ function DeskView({ onError }: { onError: (s: string) => void }) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ pct: 0, message: "" });
   const [msg, setMsg] = useState("");
-  const [filter, setFilter] = useState<DeskFilter>("bullish");
+  const [filter, setFilter] = useState<DeskFilter>("priority");
   const [showRaw, setShowRaw] = useState(false);
 
   async function refreshHistory() {
@@ -349,12 +357,32 @@ function DeskView({ onError }: { onError: (s: string) => void }) {
   const precision = latest?.payload?.precision;
 
   const filtered = useMemo(() => {
-    if (filter === "all") return catalysts.filter((c) => c.strength >= 2).slice(0, 24);
-    if (filter === "carryover") return catalysts.filter((c) => c.carryover).slice(0, 16);
-    return catalysts
-      .filter((c) => c.bias === filter && c.strength >= 2)
-      .sort((a, b) => (b.conviction || 0) - (a.conviction || 0) || b.strength - a.strength)
-      .slice(0, 16);
+    const byPriority = (a: Catalyst, b: Catalyst) =>
+      (b.priority_rank || 0) - (a.priority_rank || 0) ||
+      (b.conviction || 0) - (a.conviction || 0) ||
+      b.strength - a.strength;
+
+    let list = [...catalysts];
+    if (filter === "priority") {
+      list = list.filter((c) => c.strength >= 2 || (c.priority_rank || 0) >= 50);
+    } else if (filter === "verified_gap") {
+      list = list.filter(
+        (c) =>
+          c.priority_tier === "verified_gap" ||
+          (c.filing_status === "verified" && /gap/i.test(c.opening_impact || "")),
+      );
+    } else if (filter === "fade") {
+      list = list.filter((c) => /fade/i.test(c.opening_impact || "") || c.priority_tier === "fade");
+    } else if (filter === "unverified") {
+      list = list.filter((c) => c.filing_status === "unverified" || c.priority_tier === "unverified");
+    } else if (filter === "carryover") {
+      list = list.filter((c) => c.carryover);
+    } else if (filter === "bullish" || filter === "bearish") {
+      list = list.filter((c) => c.bias === filter && c.strength >= 2);
+    } else {
+      list = list.filter((c) => c.strength >= 2);
+    }
+    return list.sort(byPriority).slice(0, filter === "all" ? 30 : 20);
   }, [catalysts, filter]);
 
   return (
@@ -626,8 +654,12 @@ function DeskView({ onError }: { onError: (s: string) => void }) {
             <div className="filter-row">
               {(
                 [
+                  ["priority", "Best first"],
+                  ["verified_gap", "Verified gaps"],
                   ["bullish", "Bullish"],
                   ["bearish", "Bearish"],
+                  ["fade", "Fade risk"],
+                  ["unverified", "Unverified"],
                   ["carryover", "Carryover"],
                   ["all", "All"],
                 ] as const
@@ -662,6 +694,11 @@ function DeskView({ onError }: { onError: (s: string) => void }) {
                     <div className="conviction-row">
                       <span className="conv">{c.conviction}/100</span>
                       <span className="size">{c.size_hint || ""}</span>
+                      {c.priority_tier && (
+                        <span className={`tag ${c.priority_tier === "verified_gap" ? "ok" : c.priority_tier === "unverified" || c.priority_tier === "fade" ? "warn" : ""}`}>
+                          {c.priority_tier.replace(/_/g, " ")}
+                        </span>
+                      )}
                       {c.filing_status === "verified" && <span className="tag ok">Filing ✓</span>}
                       {c.filing_status === "unverified" && <span className="tag warn">Unverified</span>}
                       {c.secondary_confirmed && <span className="tag">2nd wire</span>}
@@ -670,6 +707,14 @@ function DeskView({ onError }: { onError: (s: string) => void }) {
                       )}
                       {c.deal_summary && <span className="tag warn">{c.deal_summary}</span>}
                     </div>
+                  )}
+                  {c.filing_url && (
+                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                      <a href={c.filing_url} target="_blank" rel="noreferrer">
+                        NSE filing PDF
+                      </a>
+                      {c.filing_note ? ` · ${c.filing_note}` : ""}
+                    </p>
                   )}
                   {(c.cap_tier || c.prev_day_chg_pct != null || c.sector) && (
                     <div className="mkt-tags muted">

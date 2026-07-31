@@ -58,44 +58,130 @@ TITLE_ENTITY_MAP: list[tuple[str, str, str]] = [
     (r"\bdata patterns\b", "DATAPATTNS", "Data Patterns"),
     (r"\bkalyan jewell", "KALYANKJIL", "Kalyan Jewellers"),
     (r"\bcanara robeco\b", "CANARAROE", "Canara Robeco AMC"),
+    (r"\bsml\s*mahindra\b|\bsmlisuzu\b", "SMLISUZU", "SML Mahindra"),
+    (r"\bmahindra\s*(?:&|and)\s*mahindra\b|\bm&m\b", "M&M", "Mahindra & Mahindra"),
+    (r"\btata motors\b", "TATAMOTORS", "Tata Motors"),
+    (r"\breliance\b(?!\s+power|\s+infra)", "RELIANCE", "Reliance Industries"),
+    (r"\binfosys\b", "INFY", "Infosys"),
+    (r"\btcs\b|tata consultancy", "TCS", "Tata Consultancy Services"),
+    (r"\bhdfc bank\b", "HDFCBANK", "HDFC Bank"),
+    (r"\bicici bank\b", "ICICIBANK", "ICICI Bank"),
+    (r"\badi\s*green\b", "ADANIGREEN", "Adani Green"),
+    (r"\badi\s*ports\b", "ADANIPORTS", "Adani Ports"),
+    (r"\blarsen\b|\bl&t\b", "LT", "Larsen & Toubro"),
+    (r"\bbharat electronics\b|\bbel\b", "BEL", "Bharat Electronics"),
+    (r"\bhal\b|hindustan aeronautics", "HAL", "Hindustan Aeronautics"),
+    (r"\bcochin ship\b", "COCHINSHIP", "Cochin Shipyard"),
+    (r"\bmazagon\b", "MAZDOCK", "Mazagon Dock"),
 ]
 
+# High-move corporate events (M&A, orders, fundraising, regulatory, etc.)
+# Scores 1–5; prefer specific phrasing over generic “deal/approval”.
 BULLISH_EVENTS: list[tuple[str, EventType, int]] = [
     (r"\b(?:revenue|sales|top[- ]line).{0,40}\b(?:beat|surge|jump|rise|grow|up|soars?)\b", "earnings_beat", 4),
     (r"\b(?:profit|pat|net profit|ebitda|ebit).{0,40}\b(?:beat|surge|jump|rise|grow|up|soars?)\b", "earnings_beat", 5),
     (r"\bebit soars?\b", "earnings_beat", 5),
     (r"\bmargin (?:expansion|improve|up)\b", "margin_expansion", 4),
     (r"\bguidance (?:raised|hike|upgrade|increase)\b", "guidance_raised", 5),
-    (r"\border (?:win|bag|secure|wins|bags|secures)\b", "order_win", 5),
-    (r"\b(?:contract|deal) (?:win|award|bag|secure)\b", "order_win", 5),
-    (r"\b(?:bags?|wins?|secures?|awarded)\b.{0,40}\b(?:order|contract|deal|bid)\b", "order_win", 5),
+    # Large orders / contracts
+    (r"\border (?:win|bag|secure|wins|bags|secures|received|receives|worth|valued)\b", "order_win", 5),
+    (r"\b(?:contract|deal) (?:win|award|bag|secure|won|awarded)\b", "order_win", 5),
+    (r"\b(?:bags?|wins?|secures?|awarded|receives?|received)\b.{0,50}\b(?:order|contract|deal|bid|loa|purchase order)\b", "order_win", 5),
+    (r"\b(?:order|contract|loa|purchase order).{0,40}\b(?:receiv(?:es?|ed)|worth|valued|bagged|won)\b", "order_win", 5),
+    (r"\b(?:defence|defense|railway|epc|data.?centre|data.?center).{0,40}\b(?:order|contract|award)\b", "order_win", 5),
     (r"\blowest bidder\b", "order_win", 5),
     (r"\bl1\b.{0,20}\bbid\b", "order_win", 5),
     (r"\bupgrades?\b.{0,30}\b(?:to )?['\"]?buy['\"]?\b", "broker_upgrade", 4),
-    (r"\b(?:approval|clears?|cleared|nod)\b", "regulatory_approval", 4),
-    (r"\b(?:acquisition|acquire|merger|amalgamation)\b", "m_and_a", 4),
-    (r"\b(?:partnership|jv|joint venture|mou|tie[- ]?up)\b", "partnership", 3),
+    # Regulatory / pharma / licences (specific before generic)
+    (r"\b(?:us.?fda|fda|anda|cdsco|eir)\b.{0,40}\b(?:approv\w*|clear\w*|nod|eir)\b", "regulatory_approval", 5),
+    (r"\b(?:approv\w*|clear\w*|nod).{0,40}\b(?:us.?fda|fda|anda|cdsco)\b", "regulatory_approval", 5),
+    (r"\b(?:environmental|mining|drug|licence|license).{0,30}\b(?:clearance|approv\w*|grant|nod)\b", "regulatory_approval", 5),
+    (r"\b(?:licence|license).{0,20}\b(?:grant|approv\w*|receiv\w*|obtain)\b", "regulatory_approval", 4),
+    (r"\b(?:board|nclat|nclt).{0,30}\b(?:approv\w*|clears?|cleared|nod).{0,40}\b(?:acqui|merger|scheme|slump|demerger|buyback|qip|order|contract)\b", "regulatory_approval", 4),
+    # NOTE: bare "approval/clears/nod" removed — too many false positives (AGM, routine clears)
+    # M&A / corporate restructuring (slump sale, demerger — often 10–30% movers)
+    (r"\bslump\s+sale\b", "m_and_a", 5),
+    (r"\b(?:demerger|de[- ]merger|hive[- ]?off|spin[- ]?off|scheme of arrangement)\b", "m_and_a", 5),
+    (r"\b(?:acquir\w*|acquisition|merger|amalgamation|takeover|divestiture)\b", "m_and_a", 5),
+    (r"\b(?:asset|business|division|undertaking).{0,40}\b(?:acquir\w*|purchase|buy(?:ing|s)?|sale|sold)\b", "m_and_a", 5),
+    (r"\b(?:acquir\w*|purchase|buy(?:ing|s)?).{0,40}\b(?:asset|business|division|undertaking|stake)\b", "m_and_a", 5),
+    # Strategic partnerships (named majors / JV / MoU with commercial intent)
+    (r"\b(?:strategic (?:partnership|alliance|tie[- ]?up)|joint venture|\bjv\b|tie[- ]?up)\b", "partnership", 4),
+    (r"\b(?:partnership|mou|memorandum of understanding)\b", "partnership", 3),
+    # New business / foray (rerate candidates)
+    (r"\b(?:enters?|entering|foray(?:s|ing)?(?: into)?|ventures? into|diversif\w* into)\b.{0,50}\b(?:ev|electric vehicle|battery|semiconductor|data.?cent(?:er|re)|defence|defense|new (?:business|segment|vertical))\b", "business_entry", 4),
+    (r"\b(?:launches?|to launch|forays? into)\b.{0,40}\b(?:new (?:business|segment|vertical|product)|ev|electric)\b", "business_entry", 4),
+    # Capacity
     (r"\b(?:capacity|plant|facility).{0,30}\b(?:expand|new|commission)\b", "capacity_expansion", 4),
-    (r"\bbuyback\b", "buyback", 4),
+    # Promoter / capital return / open offer
+    (r"\bbuyback\b", "buyback", 5),
+    (r"\bopen\s+offer\b", "open_offer", 5),
+    (r"\b(?:creeping acquisition|delisting)\b", "open_offer", 4),
+    (r"\bpromoter.{0,30}\b(?:buys?|bought|buying|purchas\w*|increas\w*|raised?|hiked?)\b.{0,20}\b(?:stake|holding|share)?", "promoter_buying", 5),
+    (r"\bpromoter.{0,20}\b(?:stake|holding).{0,20}\b(?:up|increase|rise|hike)\b", "promoter_buying", 5),
     (r"\bbonus\b", "bonus", 3),
-    (r"\bpromoter.{0,20}\b(?:buy|bought|purchase|increas)\b", "promoter_buying", 4),
     (r"\brating.{0,20}\b(?:upgrade|reaffirm|aaa|aa)\b", "credit_positive", 3),
-    (r"\bfund raise|qip|preferential|fpo\b", "fundraising", 3),
+    # Fundraising (QIP / rights / PE) — underweighted historically
+    (r"\b(?:rights issue|qip|preferential (?:issue|allotment)|fpo|ofs|follow[- ]on)\b", "fundraising", 5),
+    (r"\b(?:fund(?:s)?\s*rais\w*|fundraising|raises?\s+funds?)\b", "fundraising", 4),
+    (r"\b(?:private equity|pe (?:round|invest\w*)|strategic invest(?:or|ment)|anchor invest)\b", "fundraising", 5),
     (r"\bstake sale\b", "stake_sale", 3),
+    # Policy / PLI / cabinet (sector movers; slightly softer than company-specific M&A)
+    (r"\b(?:pli|production[- ]linked)\b", "policy_tailwind", 5),
+    (r"\b(?:cabinet|budget|policy).{0,30}\b(?:boost|support|incentive|approv\w*|clears?)\b", "policy_tailwind", 4),
+    (r"\b(?:government|govt).{0,30}\b(?:incentive|subsidy|policy boost|clears?|approv\w*)\b", "policy_tailwind", 4),
 ]
 
 BEARISH_EVENTS: list[tuple[str, EventType, int]] = [
-    (r"\b(?:revenue|sales).{0,40}\b(?:miss|fall|drop|decline|down|slump)\b", "earnings_miss", 4),
-    (r"\b(?:profit|pat|net profit|ebitda).{0,40}\b(?:miss|fall|drop|decline|down|slump|loss)\b", "earnings_miss", 5),
+    (r"\b(?:revenue|sales).{0,40}\b(?:miss|fall|drop|decline|down|slump(?!\s+sale))\b", "earnings_miss", 4),
+    (r"\b(?:profit|pat|net profit|ebitda).{0,40}\b(?:miss|fall|drop|decline|down|slump(?!\s+sale)|loss)\b", "earnings_miss", 5),
     (r"\bmargin (?:contraction|compress|decline|down)\b", "margin_contraction", 4),
     (r"\bguidance (?:cut|lower|slash|downgrade)\b", "guidance_cut", 5),
     (r"\b(?:sebi|nclt|ed|cbi).{0,40}\b(?:probe|notice|action|raid|penalty|ban)\b", "regulatory_action", 5),
     (r"\b(?:fraud|diversion|default|insolvency|bankruptcy)\b", "distress", 5),
     (r"\b(?:ceo|cfo|md|chairman).{0,30}\b(?:resign|quit|step(?:s|ped)? down)\b", "mgmt_exit", 4),
     (r"\brating.{0,20}\b(?:downgrade|cut|negative|watch)\b", "credit_negative", 4),
-    (r"\bpromoter.{0,20}\b(?:sell|sold|pledge|dilut)\b", "promoter_selling", 4),
+    (r"\bpromoter.{0,30}\b(?:sells?|sold|selling|pledge|pledged|dilut\w*)\b", "promoter_selling", 4),
     (r"\b(?:loss|losses) (?:widen|mount|surge)\b", "earnings_miss", 4),
+    (r"\b(?:rights issue).{0,40}\b(?:at\s+(?:a\s+)?(?:steep\s+)?discount|heavy dilution)\b", "fundraising", 4),
 ]
+
+# Event types that often gap 10%+ when strength is high (excludes soft sector policy)
+HIGH_IMPACT_GAP_TYPES = {
+    "earnings_beat",
+    "order_win",
+    "broker_upgrade",
+    "guidance_raised",
+    "m_and_a",
+    "fundraising",
+    "regulatory_approval",
+    "buyback",
+    "open_offer",
+    "promoter_buying",
+    "business_entry",
+}
+
+NEEDS_FILING_TYPES = {
+    "earnings_beat",
+    "earnings_miss",
+    "order_win",
+    "guidance_raised",
+    "guidance_cut",
+    "m_and_a",
+    "buyback",
+    "open_offer",
+    "promoter_buying",
+    "regulatory_action",
+    "regulatory_approval",
+    "fundraising",
+    "business_entry",
+}
+
+HARD_EVENT_HINT = re.compile(
+    r"\b(?:acquir\w*|acquisition|merger|slump\s+sale|demerger|order|contract|qip|rights issue|"
+    r"buyback|open\s+offer|us.?fda|promoter|bags?|wins?|secures?|preferential|pli)\b",
+    re.I,
+)
 
 
 def _text(article: Article) -> str:
@@ -106,12 +192,19 @@ def is_low_value(article: Article) -> tuple[bool, str]:
     text = _text(article)
     for pat in IGNORE_PATTERNS:
         if re.search(pat, text, re.I):
+            # Don't drop if a hard corporate-action keyword is present
+            if HARD_EVENT_HINT.search(text):
+                continue
             return True, f"Matched ignore pattern: {pat}"
     # Pure price-recap with no catalyst language
-    if re.search(r"\b(?:up|down|rise|fall|surge|plunge)\s+\d+(?:\.\d+)?%\b", text) and not any(
+    if re.search(r"\b(?:up|down|rise|fall|surge|plunge|surged|jumped)\s+\d+(?:\.\d+)?%\b", text) and not any(
         re.search(p, text, re.I) for p, _, _ in BULLISH_EVENTS + BEARISH_EVENTS
     ):
         return True, "Price movement recap without new catalyst"
+    # Soft-close window noise: session-end prints without hard catalyst
+    if getattr(article, "soft_close", False) and not HARD_EVENT_HINT.search(text):
+        if not any(re.search(p, text, re.I) for p, _, _ in BULLISH_EVENTS + BEARISH_EVENTS):
+            return True, "Soft-close print without hard catalyst"
     return False, ""
 
 
@@ -164,7 +257,7 @@ def classify_article(article: Article) -> dict:
     # P&L overrides topline when both directions appear (e.g. revenue up, profit down)
     profit_down = bool(
         re.search(
-            r"\b(?:profit|pat|net profit|ebitda).{0,40}\b(?:miss|fall|falls|drop|decline|down|slump|loss)\b",
+            r"\b(?:profit|pat|net profit|ebitda).{0,40}\b(?:miss|fall|falls|drop|decline|down|slump(?!\s+sale)|loss)\b",
             text,
             re.I,
         )
@@ -188,6 +281,26 @@ def classify_article(article: Article) -> dict:
             best_bias, best_type, best_score = "bearish", "earnings_miss", max(best_score, 5)
     elif profit_up and not profit_down:
         best_bias, best_type, best_score = "bullish", "earnings_beat", max(best_score, 5)
+
+    # Prefer specific corporate actions over generic "approval/clears"
+    if re.search(r"\b(?:qip|rights issue|preferential|fpo|ofs|fund(?:s)?\s*rais|fundraising|private equity)\b", text, re.I):
+        if best_type in {"regulatory_approval", "general_news", "policy_tailwind"} or best_score < 5:
+            best_bias, best_type, best_score = "bullish", "fundraising", max(best_score, 5)
+        # Dilutive / OFS often gaps down
+        if re.search(r"\b(?:at\s+(?:a\s+)?(?:steep\s+)?discount|heavy dilution|ofs|offer for sale)\b", text, re.I):
+            best_bias = "bearish"
+            best_score = max(best_score, 4)
+        elif re.search(r"\brights issue\b", text, re.I) and not re.search(r"\bpremium\b", text, re.I):
+            best_bias = "neutral"
+            best_score = min(best_score, 3)
+    if re.search(r"\b(?:pli|production[- ]linked)\b", text, re.I):
+        if best_type in {"regulatory_approval", "general_news"} or best_type == "policy_tailwind":
+            best_bias, best_type, best_score = "bullish", "policy_tailwind", max(best_score, 5)
+    if re.search(r"\b(?:slump\s+sale|demerger|hive[- ]?off|acquir\w*|acquisition|merger|amalgamation|takeover)\b", text, re.I):
+        if best_type in {"regulatory_approval", "general_news"}:
+            best_bias, best_type, best_score = "bullish", "m_and_a", max(best_score, 5)
+    if re.search(r"\bbuyback\b", text, re.I) and best_type == "regulatory_approval":
+        best_bias, best_type, best_score = "bullish", "buyback", max(best_score, 5)
 
     # Explicit surge language in title wins for direction
     if re.search(r"\b(?:revenue|sales).{0,30}\b(?:jumps?|soars?|surges?)\b", article.title, re.I) and best_bias != "bearish":
@@ -249,12 +362,16 @@ class StockCatalyst:
     filing_verified: bool = False
     filing_status: str = ""  # verified | soft_match | unverified | not_required
     filing_note: str = ""
+    filing_url: str = ""
     secondary_confirmed: bool = False
     conviction: int = 0
     size_hint: str = ""
     conviction_factors: list[str] = field(default_factory=list)
     oi_change_pct: float | None = None
     deal_summary: str = ""
+    # Priority ranking for desk UI: verified_gap | high_move | fade | unverified | watch
+    priority_tier: str = ""
+    priority_rank: int = 0
 
     @property
     def stars(self) -> str:
@@ -263,9 +380,47 @@ class StockCatalyst:
         return filled + empty
 
 
+def assign_priority(c: StockCatalyst) -> StockCatalyst:
+    """Rank what to look at first — verified high-move gaps over noise."""
+    opening = (c.opening_impact or "").lower()
+    verified = c.filing_status == "verified"
+    high_move = c.event_type in HIGH_IMPACT_GAP_TYPES
+    if "fade" in opening:
+        tier, rank = "fade", 40
+    elif verified and ("gap up" in opening or "gap down" in opening) and high_move:
+        tier, rank = "verified_gap", 100
+    elif verified and c.strength >= 4:
+        tier, rank = "verified_strong", 85
+    elif c.filing_status == "unverified" and c.event_type in NEEDS_FILING_TYPES:
+        tier, rank = "unverified", 25
+    elif high_move and c.strength >= 4 and "gap" in opening:
+        tier, rank = "high_move", 70
+    elif c.strength >= 3:
+        tier, rank = "watch", 50
+    else:
+        tier, rank = "low", 10
+    # Conviction / secondary bump
+    rank += min(20, int(c.conviction or 0) // 5)
+    if c.secondary_confirmed:
+        rank += 5
+    if c.liquidity_tier == "Thin":
+        rank -= 10
+    c.priority_tier = tier
+    c.priority_rank = rank
+    return c
+
+
+def sort_by_priority(catalysts: list[StockCatalyst]) -> list[StockCatalyst]:
+    for c in catalysts:
+        assign_priority(c)
+    catalysts.sort(key=lambda x: (x.priority_rank, x.conviction, x.strength), reverse=True)
+    return catalysts
+
+
 def _is_carryover_candidate(article: Article, prev_close: datetime) -> bool:
+    """Only last hour of cash session (14:30–15:30) counts as carryover — not evening news."""
     soft_start = datetime.combine(prev_close.date(), time(14, 30), tzinfo=IST)
-    return soft_start <= article.published_at <= prev_close
+    return soft_start < article.published_at <= prev_close
 
 
 def strength_label(n: int) -> str:
@@ -368,13 +523,12 @@ def opening_from_strength(
     if bias == "bullish" and mixed_quality and strength >= 3:
         return "Mild Positive"
 
-    if bias == "bullish" and strength >= 4 and event_type in {
-        "earnings_beat",
-        "order_win",
-        "broker_upgrade",
-        "guidance_raised",
-    }:
+    if bias == "bullish" and strength >= 4 and event_type in HIGH_IMPACT_GAP_TYPES:
         return "Gap Up Likely"
+    if bias == "bearish" and strength >= 4 and event_type in HIGH_IMPACT_GAP_TYPES:
+        return "Gap Down Risk"
+    if bias == "neutral":
+        return "Neutral" if strength <= 3 else "Watch for Breakout"
     table = {
         ("bullish", 5): "Gap Up Likely",
         ("bullish", 4): "Gap Up Likely",
@@ -481,10 +635,8 @@ def consolidate(articles: list[Article], prev_close: datetime) -> tuple[list[Sto
         }:
             strength = min(strength, 3 if event_type == "sector_spillover" else 2)
 
+        # Carryover = only soft-close hour (14:30–15:30). Post-close news is fresh.
         carryover = any(getattr(a, "soft_close", False) or _is_carryover_candidate(a, prev_close) for a in arts)
-        evening = datetime.combine(prev_close.date(), time(18, 0), tzinfo=IST)
-        if any(prev_close < a.published_at <= evening for a in arts) and strength >= 3:
-            carryover = True
 
         titles = "; ".join(a.title for a in arts[:4])
         roles = sorted({r for _, _, _, r in items})
@@ -498,10 +650,10 @@ def consolidate(articles: list[Article], prev_close: datetime) -> tuple[list[Sto
         joined_full = " ".join(f"{a.title} {a.body}" for a in arts)
         mixed_quality = _has_mixed_quality_hedges(joined_full)
         already_moved = _already_moved_in_headlines(joined_full)
-        # Fresh catalyst after evening prior day / morning of session
-        fresh_overnight = any(a.published_at > evening for a in arts)
+        # Anything after cash close is overnight/fresh — not sell-the-news carry
+        fresh_overnight = any(a.published_at > prev_close for a in arts)
         # Sell-the-news only when hedges exist or stock already surged on the print
-        priced_in = (already_moved and not fresh_overnight) or (carryover and mixed_quality)
+        priced_in = (already_moved and not fresh_overnight) or (carryover and mixed_quality and not fresh_overnight)
 
         if mixed_quality and bias == "bullish" and strength >= 4:
             strength = max(3, strength - 1)
@@ -513,6 +665,17 @@ def consolidate(articles: list[Article], prev_close: datetime) -> tuple[list[Sto
             risks = "Bulk/block prints are often non-directional noise."
         if event_type == "partnership":
             risks = "MoU/partnership headlines frequently lack near-term P&L impact."
+            if strength >= 4 and not re.search(r"\bstrategic\b", joined):
+                strength = min(strength, 3)
+        if event_type == "m_and_a":
+            risks = "Verify deal size, valuation, and regulatory clearances; integration risk."
+        if event_type == "fundraising":
+            risks = "Dilution / issue price vs market can turn the print negative."
+        if event_type == "policy_tailwind":
+            risks = "Policy/sector print — stock-specific winners may lag or not qualify."
+            strength = min(strength, 4)  # sector prints rarely warrant full single-name gap size
+        if event_type == "business_entry":
+            risks = "New-business forays are often multi-year; near-term P&L may be thin."
         if event_type == "sector_spillover":
             risks = "Peer reaction only — confirm stock-specific catalyst before sizing."
         if carryover and not fresh_overnight:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .filters import StockCatalyst
+from .filters import HIGH_IMPACT_GAP_TYPES, StockCatalyst, sort_by_priority
 
 
 OPENING_SCORE = {
@@ -16,6 +16,17 @@ OPENING_SCORE = {
     "Mild Negative": 8,
     "Watch for Fade": 4,
     "Gap Down Risk": 18,
+}
+
+# Expected open gap midpoint (%) by predicted label — for calibration MAE
+EXPECTED_GAP_PCT = {
+    "Gap Up Likely": 2.5,
+    "Watch for Breakout": 1.0,
+    "Mild Positive": 0.7,
+    "Neutral": 0.0,
+    "Watch for Fade": 0.3,
+    "Mild Negative": -0.7,
+    "Gap Down Risk": -2.5,
 }
 
 
@@ -40,6 +51,11 @@ def score_catalyst(
     score += int(c.strength) * 8
     factors.append(f"strength {c.strength}/5")
 
+    # High-move corporate event types
+    if c.event_type in HIGH_IMPACT_GAP_TYPES and c.bias in {"bullish", "bearish"}:
+        score += 8
+        factors.append(f"high-move:{c.event_type}")
+
     # Opening impact alignment
     score += OPENING_SCORE.get(c.opening_impact, 0)
     if c.opening_impact:
@@ -56,6 +72,10 @@ def score_catalyst(
     elif status == "soft_match":
         score -= 4
         factors.append("soft filing match")
+
+    if getattr(c, "secondary_confirmed", False):
+        score += 6
+        factors.append("secondary news confirm")
 
     # Liquidity / cap
     if c.liquidity_tier == "High":
@@ -129,10 +149,15 @@ def score_catalyst(
 
     score = max(0, min(100, score))
 
-    # Size hint
-    if score >= 75 and c.liquidity_tier in {"High", "Medium", ""} and status != "unverified":
+    # Size hint — 1.0R requires verified filing + decent liquidity
+    if (
+        score >= 75
+        and c.liquidity_tier in {"High", "Medium", ""}
+        and status == "verified"
+        and event_regime not in {"Event Risk", "Expiry"}
+    ):
         size = "1.0R"
-    elif score >= 60:
+    elif score >= 60 and status != "unverified":
         size = "0.75R"
     elif score >= 45:
         size = "0.5R"
@@ -144,6 +169,9 @@ def score_catalyst(
     if c.liquidity_tier == "Thin" and size.startswith("1"):
         size = "0.5R"
         factors.append("size capped for thin book")
+    if status == "unverified" and size in {"1.0R", "0.75R"}:
+        size = "0.5R"
+        factors.append("size capped — unverified")
 
     return ConvictionResult(conviction=score, size_hint=size, factors=factors[:6])
 
@@ -165,5 +193,4 @@ def apply_conviction(
         c.conviction = res.conviction
         c.size_hint = res.size_hint
         c.conviction_factors = res.factors
-    catalysts.sort(key=lambda x: (x.conviction, x.strength), reverse=True)
-    return catalysts
+    return sort_by_priority(catalysts)

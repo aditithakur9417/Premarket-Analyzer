@@ -37,6 +37,15 @@ def _normalize_cron(cron: str) -> str:
 def scheduled_job() -> None:
     db = SessionLocal()
     try:
+        from premarket.calendar_nse import IST, is_trading_day
+        from .seed import holiday_dates
+        from premarket.calendar_nse import set_holiday_provider
+
+        set_holiday_provider(lambda: holiday_dates(db))
+        today = datetime.now(IST).date()
+        if not is_trading_day(today):
+            logger.info("Scheduled run skipped (NSE holiday / weekend: %s)", today)
+            return
         cfg = get_setting_map(db)
         if cfg.get("schedule_enabled", "true").lower() not in {"1", "true", "yes"}:
             logger.info("Scheduled run skipped (disabled)")

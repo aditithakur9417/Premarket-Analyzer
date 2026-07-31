@@ -21,11 +21,16 @@ from premarket.auction_flow import (  # noqa: E402
     fetch_large_deals,
     fetch_preopen_tape,
 )
-from premarket.calendar_nse import IST, previous_market_close, set_holiday_provider  # noqa: E402
+from premarket.calendar_nse import IST, is_trading_day, previous_market_close, set_holiday_provider  # noqa: E402
 from premarket.calibration import build_prediction_rows  # noqa: E402
 from premarket.conviction import apply_conviction  # noqa: E402
-from premarket.filings import fetch_announcements, index_filings, verify_catalysts  # noqa: E402
-from premarket.filters import consolidate  # noqa: E402
+from premarket.filings import (  # noqa: E402
+    discover_catalysts_from_filings,
+    fetch_announcements,
+    index_filings,
+    verify_catalysts,
+)
+from premarket.filters import consolidate, sort_by_priority  # noqa: E402
 from premarket.global_cues import adjust_view_with_global, fetch_global_cues, sector_global_flags  # noqa: E402
 from premarket.groww_feed import fetch_since  # noqa: E402
 from premarket.market_context import adjust_market_view, fetch_market_tape  # noqa: E402
@@ -165,11 +170,23 @@ def run_analysis(
 
         filings_index: dict = {}
         filing_verifications: dict = {}
+        discovered_n = 0
         try:
             ann = fetch_announcements(days=2)
             filings_index = index_filings(ann)
-            filing_verifications = verify_catalysts(catalysts, filings_index, top_n=20)
-            _progress(db, placeholder, 66, f"step:enrich|Cross-checked {len(ann)} NSE filings…")
+            # P0: discover catalysts Groww never carried
+            discovered = discover_catalysts_from_filings(filings_index, catalysts)
+            if discovered:
+                catalysts.extend(discovered)
+                discovered_n = len(discovered)
+                placeholder.unique_stocks = len({c.symbol for c in catalysts})
+            filing_verifications = verify_catalysts(catalysts, filings_index, top_n=40)
+            _progress(
+                db,
+                placeholder,
+                66,
+                f"step:enrich|Filings: {len(ann)} scanned, +{discovered_n} discovered…",
+            )
         except Exception as exc:  # noqa: BLE001
             _progress(db, placeholder, 66, f"step:enrich|Filings unavailable ({exc})…")
 
@@ -194,7 +211,8 @@ def run_analysis(
             event_regime=event_ctx.regime,
             global_risk=global_tape.composite_risk,
         )
-        _progress(db, placeholder, 69, "step:enrich|Conviction + size hints computed…")
+        catalysts = sort_by_priority(catalysts)
+        _progress(db, placeholder, 69, "step:enrich|Conviction + priority ranking…")
 
         llm_view = None
         actually_used_llm = False
@@ -207,13 +225,13 @@ def run_analysis(
             _progress(db, placeholder, 78, "step:view|Building market view…")
             llm_view = market_view_llm(bullish, bearish, global_context=brief)
             actually_used_llm = True
-            # Re-score conviction after LLM may change opening_impact
             catalysts = apply_conviction(
                 catalysts,
                 gift_gap_pct=gift_gap,
                 event_regime=event_ctx.regime,
                 global_risk=global_tape.composite_risk,
             )
+            catalysts = sort_by_priority(catalysts)
         else:
             _progress(db, placeholder, 74, "step:view|Building heuristic market view…")
 
@@ -236,6 +254,7 @@ def run_analysis(
         precision = {
             "filings_scanned": sum(len(v) for v in filings_index.values()) if filings_index else 0,
             "filings_verified": sum(1 for v in filing_verifications.values() if v.verified),
+            "filings_discovered": discovered_n,
             "secondary": secondary,
             "adr_tape": adr_tape.to_dict(),
             "event_context": event_ctx.to_dict(),
@@ -243,6 +262,10 @@ def run_analysis(
             "fo_flow": fo_flow.to_dict(),
             "deals": deals.to_dict(),
             "preopen": preopen.to_dict(),
+            "priority_counts": {
+                t: sum(1 for c in catalysts if c.priority_tier == t)
+                for t in ("verified_gap", "verified_strong", "high_move", "watch", "fade", "unverified", "low")
+            },
         }
 
         report_md = render_report(
@@ -289,12 +312,15 @@ def run_analysis(
                     "filing_verified": c.filing_verified,
                     "filing_status": c.filing_status,
                     "filing_note": c.filing_note,
+                    "filing_url": getattr(c, "filing_url", "") or "",
                     "secondary_confirmed": c.secondary_confirmed,
                     "conviction": c.conviction,
                     "size_hint": c.size_hint,
                     "conviction_factors": c.conviction_factors,
                     "oi_change_pct": c.oi_change_pct,
                     "deal_summary": c.deal_summary,
+                    "priority_tier": getattr(c, "priority_tier", "") or "",
+                    "priority_rank": getattr(c, "priority_rank", 0) or 0,
                 }
                 for c in catalysts
             ],
