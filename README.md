@@ -35,6 +35,7 @@ Full guides:
 - **[docs/HOSTINGER_HPANEL.md](docs/HOSTINGER_HPANEL.md)** — Hostinger hPanel (VPS + Docker Manager)
 - **[docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md)** — free morning run via GitHub Actions (no VPS)
 - **[docs/LLM_DEPLOY.md](docs/LLM_DEPLOY.md)** — free Gemini/Groq (no local Ollama)
+- **[docs/ACCURACY_UPGRADES.md](docs/ACCURACY_UPGRADES.md)** — premarket classifier / filings accuracy
 
 ```bash
 # Frontend is built inside Docker now; local build optional
